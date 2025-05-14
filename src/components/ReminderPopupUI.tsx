@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import CustomToast from "./custom-toast";
 import { useReminderMutation } from "@/hooks/use-reminder-mutation";
 import { BiLoaderCircle } from "react-icons/bi";
+import * as signalR from '@microsoft/signalr'
  
 
 const suggestions = [
@@ -16,6 +17,7 @@ const suggestions = [
 ];
 
 const ReminderPopupUI = () => {
+    const userId = "Salman232"; 
     const { isOpen, onClose } = useReminderModal();
     const [input, setInput] = useState(""); 
     const [filteredSuggestion, setFilteredSuggestion] = useState<string[]>([]); 
@@ -24,20 +26,26 @@ const ReminderPopupUI = () => {
     const handleClose = () => onClose(); 
 
     useEffect(() => {
-        const eventSource = new EventSource(`http://localhost:5253/api/notification`); 
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data); 
-            toast.custom(() => <CustomToast message={`Reminder: ${data.message}`} />)
-        }
+       const connection = new signalR.HubConnectionBuilder()
+        .withUrl("http://localhost:5253/reminderHub")
+        .withAutomaticReconnect()
+        .build(); 
 
-        eventSource.onerror = () => {
-            console.error("SSE connection error"); 
-            eventSource.close();
-        }
+        connection.start()
+            .then(() => {
+                console.log("Connected to SignalR hub");
 
-        return () => {
-            eventSource.close(); 
-        }
+                connection.on("ReceiveReminder", (message: string) => {
+                    toast.custom(() => <CustomToast message={`Reminder: ${message}`} />)
+                }); 
+            })
+            .catch((error) => {
+                console.error("SignalR connection error: ", error);
+            }); 
+
+            return () => {
+                connection.stop(); 
+            }
 
     }, [])
 
@@ -71,8 +79,13 @@ const ReminderPopupUI = () => {
             return; 
         }
 
+        const payload = { 
+            userId, 
+            message: input
+        }
+
     
-        createReminder(input, {
+        createReminder(payload, {
             onSuccess: () =>{
                 onClose(); 
             }
